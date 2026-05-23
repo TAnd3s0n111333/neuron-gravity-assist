@@ -114,25 +114,99 @@ class Simulation:
         }
 
         self.body_list.append(probe)
-        self.probe_index = len(self.body_list) - 1
+
+        # 4. Setup Animation Parameters
+        years = 8
+        num_frames = 4000
+        self.times = [years * i / num_frames for i in range(num_frames)]
+
+    def get_times(self):
+        return self.times
+
+    def start_sim(self):
+        self.sim = self.initial_sim.copy()
+        self.t = 0
+
+    def num_planets(self):
+        return len(self.initial_sim.particles[:-1])
+
+    def get_observations(self):
+        if self.sim is None:
+            raise "must call start_sim()"
+
+        probe = self.sim.particles[-1]
+        obs = []
+
+        for planet in self.sim.particles[:-1]:
+            dx = planet.x - probe.x
+            dy = planet.y - probe.y
+            dvx = planet.vx - probe.vx
+            dvy = planet.vy - probe.vy
+            angle = math.atan2(dy, dx)
+            dist = math.sqrt(dx*dx+dy*dy)
+            obs.extend([dx, dy, dvx, dvy, dist, angle])
+
+        return obs
+
+    def dist_to_target(self):
+        idx = None
+        for i, body in enumerate(self.body_list):
+            if body["name"] == "Jupiter":
+                idx = i
+        
+        assert idx is not None
+
+        target = self.sim.particles[idx]
+        probe = self.sim.particles[-1]
+
+        dx = target.x - probe.x
+        dy = target.y - probe.y
+
+        return math.sqrt(dx*dx+dy*dy)
+
+    def apply_thrust(self, thrust_angle, thrust_magnitude):
+        MAX_THRUST = 0.1
+        probe = self.sim.particles[-1]
+        probe.vx += thrust_magnitude * math.cos(thrust_angle) * MAX_THRUST
+        probe.vy += thrust_magnitude * math.sin(thrust_angle) * MAX_THRUST
+
+    def step(self, thrust_angle, thrust_magnitude):
+        self.apply_thrust(thrust_angle, thrust_magnitude)
+        self.sim.integrate(self.times[self.t])
+        self.t += 1
+
+    def time_limit_reached(self):
+        return self.t >= len(self.times)
+
+    def is_captured_by_target(self):
+        target_idx = next(i for i, b in enumerate(self.body_list) if b["name"] == "Jupiter")
+        target = self.sim.particles[target_idx]
+        probe = self.sim.particles[-1]
+
+        dx = probe.x - target.x
+        dy = probe.y - target.y
+        r = math.sqrt(dx**2 + dy**2)
+
+        dvx = probe.vx - target.vx
+        dvy = probe.vy - target.vy
+        v_rel_sq = dvx**2 + dvy**2
+
+        GM_target = 4 * math.pi**2 * target.m
+        energy = 0.5 * v_rel_sq - GM_target / r
+        return energy < 0
 
     def _get_future_trajectory(self, steps=200, dt=0.01):
-        future_sim = self.initial_sim.copy()
+        future_sim = self.sim.copy()
         xs, ys = [], []
         for _ in range(steps):
-            sc = future_sim.particles[self.probe_index]
+            sc = future_sim.particles[-1]
             xs.append(sc.x)
             ys.append(sc.y)
             future_sim.integrate(future_sim.t + dt)
         return xs, ys
 
-    def run_inference(self):
-        sim = self.initial_sim.copy()
-
-        # 4. Setup Animation Parameters
-        years = 2
-        num_frames = 1000
-        times = [years * i / num_frames for i in range(num_frames)]
+    def run_inference(self, model):
+        self.start_sim()
 
         # Making a probe trajectory
         probe_trajectory = []
@@ -147,7 +221,7 @@ class Simulation:
                 plot_bodies.append(body)
 
         # Setup the figure and axes
-        view_radius = 2.0  # AU — half-width of the camera window around the probe
+        view_radius = 100.0  # AU — half-width of the camera window around the probe
 
         fig, ax = plt.subplots(figsize=(8, 8))
         ax.set_aspect('equal')
@@ -188,11 +262,16 @@ class Simulation:
 
         # 4. Animation Function
         def update(frame):
-            t = times[frame]
-            sim.integrate(t)
+            obs = self.get_observations()
+            action, _ = model.predict(obs)
+            angle, mag = action
+            self.apply_thrust(angle, mag)
+
+            t = self.times[frame]
+            self.sim.integrate(t)
             
             for plot_i, particle_i in enumerate(plot_indices):
-                p = sim.particles[particle_i]
+                p = self.sim.particles[particle_i]
 
                 # Update trail data
                 x_data[plot_i].append(p.x)
@@ -202,7 +281,7 @@ class Simulation:
                 lines[plot_i].set_data(x_data[plot_i], y_data[plot_i])
                 dots[plot_i].set_data([p.x], [p.y])
 
-            probe_particle = sim.particles[self.probe_index]
+            probe_particle = self.sim.particles[-1]
 
             # Camera tracks the probe
             ax.set_xlim(probe_particle.x - view_radius, probe_particle.x + view_radius)
@@ -226,7 +305,8 @@ class Simulation:
             return lines + dots + [future_line]
 
         # 5. Run and Save Animation
-        ani = FuncAnimation(fig, update, frames=num_frames, interval=30, blit=False)
+        ani = FuncAnimation(fig, update, frames=len(self.times), interval=10, blit=False)
+
 
         # To save as MP4 (requires ffmpeg) or GIF (requires pillow)
         # ani.save('solar_system_animation.mp4', writer='ffmpeg', fps=30)
@@ -252,6 +332,3 @@ class Simulation:
             csv_file.writerows(probe_trajectory)
 
         print("Probe trajectory saved as probe_trajectory.csv")
-
-sim = Simulation()
-sim.run_inference()

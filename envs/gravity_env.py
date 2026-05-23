@@ -1,38 +1,51 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from stable_baselines3 import PPO
 
-class CustomEnv(gym.Env):
+import visuals.simulation as sim
+
+class GravityEnv(gym.Env):
     def __init__(self):
         super().__init__()
-        # Define action_space: Discrete or Box (Continuous)
-        self.action_space = spaces.Discrete(2)
-        # Define observation_space: Use Box for numerical ranges
-        self.observation_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+
+        self.sim = sim.Simulation()
+
+        obs_size = 6 * self.sim.num_planets()  # per planet: dx, dy, dvx, dvy, dist, angle
+
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float32
+        )
+
+        # Action: [thrust_angle (-pi to pi), thrust_magnitude (0 to 1.0)]
+        self.action_space = spaces.Box(
+            low=np.array([-np.pi, 0.0]),
+            high=np.array([np.pi, 1.0]),
+            dtype=np.float32
+        )
+
+        self._prev_dist_to_target = None
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        observation = self.observation_space.sample()
-        return observation, {}
+        self.sim.start_sim()
+        self._prev_dist_to_target = self.sim.dist_to_target()
+        return np.array(self.sim.get_observations(), dtype=np.float32), {}
 
     def step(self, action):
-        # Your logic here
-        observation = self.observation_space.sample()
-        reward = 1.0
-        terminated = False
-        truncated = False
-        info = {}
-        return observation, reward, terminated, truncated, info
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+        angle, magnitude = action
 
-# Instantiate the environment
-env = CustomEnv()
+        self.sim.step(angle, magnitude)
 
-# Link the model to your environment
-model = PPO("MlpPolicy", env, verbose=1)
+        terminated = self.sim.is_captured_by_target()
+        truncated = self.sim.time_limit_reached()
 
-# Start training
-model.learn(total_timesteps=10000)
+        dist = self.sim.dist_to_target()
+        reward = self._prev_dist_to_target - dist  # positive when getting closer
 
-# Save the trained agent
-model.save("ppo_custom_env")
+        if terminated:
+            reward += 1000.0
+
+        self._prev_dist_to_target = dist
+
+        return np.array(self.sim.get_observations(), dtype=np.float32), reward, terminated, truncated, {}
