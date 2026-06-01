@@ -205,6 +205,140 @@ class Simulation:
             future_sim.integrate(future_sim.t + dt)
         return xs, ys
 
+    # ==================== Orbital Mechanics Functions ====================
+    
+    def calculate_radius(self, particle):
+        """
+        Calculate the orbital radius (distance from Sun).
+        
+        Args:
+            particle: The particle object
+            
+        Returns:
+            float: Radius in AU
+        """
+        r = math.sqrt(particle.x**2 + particle.y**2 + particle.z**2)
+        return r
+    
+    def calculate_eccentricity(self, particle, central_mass=1.0):
+        """
+        Calculate orbital eccentricity (how circular the orbit is).
+        e = 0: circular orbit
+        0 < e < 1: elliptical orbit
+        e = 1: parabolic trajectory
+        e > 1: hyperbolic trajectory
+        
+        Args:
+            particle: The particle object
+            central_mass: Mass of central body (Sun = 1.0 in solar masses)
+            
+        Returns:
+            float: Eccentricity value
+        """
+        r = self.calculate_radius(particle)
+        v = math.sqrt(particle.vx**2 + particle.vy**2 + particle.vz**2)
+        
+        # GM in AU^3/yr^2 units (for Sun, G*M = 4π²)
+        GM = 4 * math.pi**2 * central_mass
+        
+        # Specific orbital energy
+        epsilon = (v**2 / 2) - (GM / r)
+        
+        # Angular momentum vector components
+        h_x = particle.y * particle.vz - particle.z * particle.vy
+        h_y = particle.z * particle.vx - particle.x * particle.vz
+        h_z = particle.x * particle.vy - particle.y * particle.vx
+        h = math.sqrt(h_x**2 + h_y**2 + h_z**2)
+        
+        # Eccentricity
+        if epsilon < 0:
+            e = math.sqrt(1 + (2 * epsilon * h**2) / (GM**2))
+        else:
+            # For parabolic or hyperbolic orbits
+            e = math.sqrt(1 + (2 * epsilon * h**2) / (GM**2))
+        
+        return e
+    
+    def calculate_semi_major_axis(self, particle, central_mass=1.0):
+        """
+        Calculate the semi-major axis of the orbit.
+        
+        Args:
+            particle: The particle object
+            central_mass: Mass of central body (Sun = 1.0 in solar masses)
+            
+        Returns:
+            float: Semi-major axis in AU (returns None for parabolic/hyperbolic orbits)
+        """
+        r = self.calculate_radius(particle)
+        v = math.sqrt(particle.vx**2 + particle.vy**2 + particle.vz**2)
+        
+        # GM in AU^3/yr^2 units (for Sun, G*M = 4π²)
+        GM = 4 * math.pi**2 * central_mass
+        
+        # Specific orbital energy
+        epsilon = (v**2 / 2) - (GM / r)
+        
+        # Semi-major axis (only valid for elliptical orbits where epsilon < 0)
+        if epsilon < 0:
+            a = -GM / (2 * epsilon)
+        else:
+            return None  # Not an elliptical orbit
+        
+        return a
+    
+    def calculate_periapsis_apoapsis(self, particle, central_mass=1.0):
+        """
+        Calculate periapsis and apoapsis distances.
+        Periapsis (rp): closest point to central body
+        Apoapsis (ra): farthest point from central body
+        
+        Args:
+            particle: The particle object
+            central_mass: Mass of central body (Sun = 1.0 in solar masses)
+            
+        Returns:
+            tuple: (periapsis, apoapsis) in AU, or (None, None) if not elliptical
+        """
+        a = self.calculate_semi_major_axis(particle, central_mass)
+        e = self.calculate_eccentricity(particle, central_mass)
+        
+        if a is None or e >= 1:
+            return None, None  # Not an elliptical orbit
+        
+        periapsis = a * (1 - e)
+        apoapsis = a * (1 + e)
+        
+        return periapsis, apoapsis
+    
+    def calculate_inclination(self, particle):
+        """
+        Calculate orbital inclination (angle of orbital plane relative to xy-plane).
+        Inclination in degrees.
+        
+        Args:
+            particle: The particle object
+            
+        Returns:
+            float: Inclination in degrees
+        """
+        # Angular momentum vector components
+        h_x = particle.y * particle.vz - particle.z * particle.vy
+        h_y = particle.z * particle.vx - particle.x * particle.vz
+        h_z = particle.x * particle.vy - particle.y * particle.vx
+        h = math.sqrt(h_x**2 + h_y**2 + h_z**2)
+        
+        # Inclination: angle between orbital plane and xy-plane
+        if h > 0:
+            inclination_rad = math.acos(abs(h_z) / h)
+        else:
+            inclination_rad = 0
+        
+        # Convert to degrees
+        inclination_deg = math.degrees(inclination_rad)
+        
+        return inclination_deg
+
     def run_inference(self, model):
         self.start_sim()
 
