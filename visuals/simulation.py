@@ -332,3 +332,10 @@ class Simulation:
             csv_file.writerows(probe_trajectory)
 
         print("Probe trajectory saved as probe_trajectory.csv")
+
+class DummyModel:
+    def predict(self, obs):
+        return [0.0, 0.0], None
+
+sim = Simulation()
+sim.run_inference(DummyModel())

@@ -1,11 +1,13 @@
 import rebound
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+import math
+import csv
 
 # 1. Initialize the simulation
 sim = rebound.Simulation()
 sim.units = ('yr', 'AU', 'Msun')
-sim.integrator = "ias15"
+sim.integrator = "whfast"
 
 # 2. Add the Sun and Planets
 solar_system = {
@@ -71,11 +73,53 @@ for body in body_list:
 
 sim.move_to_com()
 
+# Finding the location of the Earth currently 
+earth_index = None
+for i, body in enumerate(body_list):
+    if body["name"] == "Earth":
+        earth_index = i
+earth = sim.particles[earth_index]
+
+# Probe settings
+probe_start_offset = 0.0001
+probe_launch_thrust = 0.5
+
+# Earth's movement directions
+earth_speed = math.sqrt(earth.vx**2 + earth.vy**2 + earth.vz**2) # Distance formula but for the velocity 
+unit_vx = earth.vx / earth_speed
+unit_vy = earth.vy / earth_speed
+unit_vz = earth.vz / earth_speed
+
+# Adding the probe
+sim.add(
+    m=1000/(1.989e30),
+    # Placement of the probe, based on Earth
+    x=earth.x + probe_start_offset,
+    y=earth.y,
+    z=earth.z,
+    # Earth's starting velocity
+    vx=earth.vx + probe_launch_thrust * unit_vx,
+    vy=earth.vy + probe_launch_thrust * unit_vy,
+    vz=earth.vz + probe_launch_thrust * unit_vz
+)
+probe = {
+    "name": "Probe",
+    "horizon_id": None,
+    "size": 3,
+    "colour": "purple"
+}
+
+body_list.append(probe)
+probe_index = len(body_list) - 1
+
 
 # 4. Setup Animation Parameters
-years = 166
-num_frames = 500
+years = 2
+num_frames = 1000
 times = [years * i / num_frames for i in range(num_frames)]
+
+# Making a probe trajectory
+probe_trajectory = []
 
 # Remove Sun from plotting
 plot_indices = []
@@ -88,8 +132,8 @@ for i, body in enumerate(body_list):
 
 # Setup the figure and axes
 fig, ax = plt.subplots(figsize=(8, 8))
-ax.set_xlim(-35, 35)
-ax.set_ylim(-35, 35)
+ax.set_xlim(-5, 5)
+ax.set_ylim(-5, 5)
 ax.set_aspect('equal')
 ax.set_xlabel('Distance (AU)')
 ax.set_ylabel('Distance (AU)')
@@ -127,7 +171,8 @@ y_data = [[] for _ in range(len(plot_bodies))]
 
 # 4. Animation Function
 def update(frame):
-    sim.integrate(times[frame])
+    t = times[frame]
+    sim.integrate(t)
     
     for plot_i, particle_i in enumerate(plot_indices):
         p = sim.particles[particle_i]
@@ -139,6 +184,19 @@ def update(frame):
         # Update the visual elements
         lines[plot_i].set_data(x_data[plot_i], y_data[plot_i])
         dots[plot_i].set_data([p.x], [p.y])
+
+    probe_particle = sim.particles[probe_index]
+
+    # New row of data for the trajectory
+    probe_trajectory.append([
+        frame,
+            t,
+            probe_particle.x,
+            probe_particle.y,
+            probe_particle.z,
+            probe_particle.vx,
+            probe_particle.vy,
+            probe_particle.vz ])
         
     return lines + dots
 
@@ -150,3 +208,22 @@ ani = FuncAnimation(fig, update, frames=num_frames, interval=30, blit=True)
 
 print("Animation saved as solar_system_animation.mp4")
 plt.show() # Uncomment to view while running
+
+# Writing the entire trajectory into a csv file
+with open("probe_trajectory.csv", "w", newline="") as file:
+    csv_file = csv.writer(file)
+
+    csv_file.writerow([
+        "frame",
+        "time_years",
+        "x_AU",
+        "y_AU",
+        "z_AU",
+        "vx_AU_per_year",
+        "vy_AU_per_year",
+        "vz_AU_per_year"
+    ])
+
+    csv_file.writerows(probe_trajectory)
+
+print("Probe trajectory saved as probe_trajectory.csv")
