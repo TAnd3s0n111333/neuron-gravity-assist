@@ -224,6 +224,70 @@ class Simulation:
 
         return energy
 
+    def get_probe_orbit(self, sim = None):
+        #Gets the probe's orbit relative to the Sun.
+
+        # Iff we wanted to try it with the future trajectory for future calculations
+        if sim is None:
+            sim = self.sim
+
+        sun = sim.particles[0]
+        probe = sim.particles[-1]
+
+        return probe.orbit(primary=sun)
+
+
+    def get_eccentricity(self, sim=None):
+        # Gets the probe's orbital eccentricity
+
+        #e = 0 means circular where 0 < e < 1 means elliptical
+
+        orbit = self._get_probe_orbit(sim)
+        return orbit.e
+
+
+    def get_semi_major_axis(self, sim=None):
+        # Gets the probe's semi-major axis relative to the Sun
+
+        orbit = self._get_probe_orbit(sim)
+        return orbit.a
+
+
+    def get_periapsis_radius(self, sim=None):
+        # Gets the probe's periapsis radius, the closest distance between the probe and the Sun
+
+        orbit = self._get_probe_orbit(sim)
+
+        a = orbit.a
+        e = orbit.e
+
+        # Formula: rp = a(1 - e)
+        return a * (1 - e)
+
+
+    def get_apoapsis_radius(self, sim=None):
+        # Gets the probe's apoapsis radius, the furthest distance between the probe and the Sun
+
+        orbit = self._get_probe_orbit(sim)
+
+        a = orbit.a
+        e = orbit.e
+
+        # If e >= 1, there is no apoapsis
+        if e >= 1:
+            return None
+        
+        # Formula: ra = a(1 + e)
+        return a * (1 + e)
+
+
+    def get_inclination(self, sim=None):
+        # Gets the probe's orbital inclination in radians
+
+        orbit = self._get_probe_orbit(sim)
+        return orbit.inc
+
+
     def _get_future_trajectory(self, steps=200, dt=0.01):
         future_sim = self.sim.copy()
         future_trajectory = []
