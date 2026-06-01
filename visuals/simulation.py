@@ -6,12 +6,12 @@ import csv
 
 class Simulation:
     def __init__(self):
-        # 1. Initialize the simulation
+        # Initialize the simulation
         self.initial_sim = rebound.Simulation()
         self.initial_sim.units = ('yr', 'AU', 'Msun')
         self.initial_sim.integrator = "whfast"
 
-        # 2. Add the Sun and Planets
+        # Add the Sun and Planets
         solar_system = {
             "Sun": {
                 "name": "Sun",
@@ -115,7 +115,7 @@ class Simulation:
 
         self.body_list.append(probe)
 
-        # 4. Setup Animation Parameters
+        # Setup Animation Parameters
         years = 8
         num_frames = 4000
         self.times = [years * i / num_frames for i in range(num_frames)]
@@ -194,16 +194,44 @@ class Simulation:
         GM_target = 4 * math.pi**2 * target.m
         energy = 0.5 * v_rel_sq - GM_target / r
         return energy < 0
+    
+    def get_heliocentric_energy(self, sim=None):
+        if sim is None:
+            sim = self.sim
+
+        sun = sim.particles[0]
+        probe = sim.particles[-1]
+
+        # Probe position relative to the Sun
+        dx = probe.x - sun.x
+        dy = probe.y - sun.y
+        dz = probe.z - sun.z
+        # This is the total straight distance from probe to sun
+        r = math.sqrt(dx**2 + dy**2 + dz**2)
+
+        # Probe velocity relative to the Sun
+        dvx = probe.vx - sun.vx
+        dvy = probe.vy - sun.vy
+        dvz = probe.vz - sun.vz
+        # This is probe's velocity relative to the sun (and squared)
+        v_squared = dvx**2 + dvy**2 + dvz**2
+
+        # In REBOUND units yr, AU, Msun, G = 4*pi^2
+        GM_sun = 4 * math.pi**2 * sun.m
+
+        # E = (KE - GPE)/m = 0.5 *v^2 - GM/r
+        energy = 0.5 * v_squared - GM_sun /r
+
+        return energy
 
     def _get_future_trajectory(self, steps=200, dt=0.01):
         future_sim = self.sim.copy()
-        xs, ys = [], []
+        future_trajectory = []
         for _ in range(steps):
             sc = future_sim.particles[-1]
-            xs.append(sc.x)
-            ys.append(sc.y)
+            future_trajectory.append([sc.x, sc.y])
             future_sim.integrate(future_sim.t + dt)
-        return xs, ys
+        return future_trajectory
 
     def run_inference(self, model):
         self.start_sim()
@@ -260,7 +288,7 @@ class Simulation:
         x_data = [[] for _ in range(len(plot_bodies))]
         y_data = [[] for _ in range(len(plot_bodies))]
 
-        # 4. Animation Function
+        # Animation Function
         def update(frame):
             obs = self.get_observations()
             action, _ = model.predict(obs)
@@ -288,7 +316,11 @@ class Simulation:
             ax.set_ylim(probe_particle.y - view_radius, probe_particle.y + view_radius)
 
             # Plot predicted coasting trajectory
-            fx, fy = self._get_future_trajectory()
+            future_trajectory = self._get_future_trajectory()
+
+            fx = [point[0] for point in future_trajectory]
+            fy = [point[1] for point in future_trajectory]
+
             future_line.set_data(fx, fy)
 
             # New row of data for the trajectory
@@ -304,7 +336,7 @@ class Simulation:
                 
             return lines + dots + [future_line]
 
-        # 5. Run and Save Animation
+        # Run and Save Animation
         ani = FuncAnimation(fig, update, frames=len(self.times), interval=10, blit=False)
 
 
@@ -332,10 +364,3 @@ class Simulation:
             csv_file.writerows(probe_trajectory)
 
         print("Probe trajectory saved as probe_trajectory.csv")
-
-class DummyModel:
-    def predict(self, obs):
-        return [0.0, 0.0], None
-
-sim = Simulation()
-sim.run_inference(DummyModel())
