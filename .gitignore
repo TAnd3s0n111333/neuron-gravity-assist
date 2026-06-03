@@ -1,4 +1,52 @@
-solar_system_animation.mp4
+# ==========================================
+# Python Virtual Environments & Configs
+# ==========================================
+.venv/
+venv/
+ENV/
+pyvenv.cfg
 
-/*.zip
-/*.csv
+# ==========================================
+# Python Caching & Compiled Files
+# ==========================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# ==========================================
+# Reinforcement Learning Artifacts & Models
+# ==========================================
+# Ignore the training data directories
+data/logs/
+data/models/
+checkpoints/
+tensorboard_logs/
+
+# Ignore loose zipped model weights in the root directory
+*.zip
+ppo_gravity_final.zip
+ppo_gravity_stage1.zip
+ppo_gravity_stage2.zip
+gravity_assist_ppo.zip
+
+# ==========================================
+# Generated Simulation Outputs & Datasets
+# ==========================================
+# Ignore exported telemetry and trajectories
+*.csv
+probe_trajectory.csv
+
+# Ignore generated MP4 simulation videos and GIFs
+*.mp4
+*.gif
+presentation_*_render.mp4
+
+# ==========================================
+# IDE & System Files
+# ==========================================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
